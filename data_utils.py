@@ -3,6 +3,17 @@ import os as os
 import numpy as np
 import pandas as pd
 
+def load_open_response_data(training_path):
+    training_df = pd.read_csv(training_path)
+    essay_list = []
+    essays = training_df['answer']
+    scores = training_df['correct']
+    for idx, essay in essays.iteritems():
+        essay = clean_str(essay)
+        #essay_list.append([w for w in tokenize(essay) if is_ascii(w)])
+        essay_list.append(tokenize(essay))
+    return essay_list, scores.tolist()
+
 def load_training_data(training_path):
     training_df = pd.read_csv(training_path, delimiter='\t')
     resolved_score_list = []
@@ -83,6 +94,7 @@ def clean_str(string):
     Tokenization/string cleaning for all datasets except for SST.
     Original taken from https://github.com/yoonkim/CNN_sentence/blob/master/process_data.py
     """
+    string = str(string)
     string = re.sub(r"[^A-Za-z0-9(),!?\'\`]", " ", string)
     string = re.sub(r"\'s", " \'s", string)
     string = re.sub(r"\'ve", " \'ve", string)

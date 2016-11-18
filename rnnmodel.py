@@ -41,8 +41,8 @@ n_hidden = FLAGS.num_hidden_nodes # hidden layer num of features
 n_classes = 2 # total classes (0-1 digits)
 
 #deal with input data
-training_path = 'training_set_rel3.tsv'     #put name of training file here
-essay_list, label = data_utils.load_training_data(training_path)
+training_path = '../cleaned_graded_data.csv'     #put name of training file here
+essay_list, label = data_utils.load_open_response_data(training_path)
 
 #for i in range(len(label)):
 #    if label[i] > 4:
@@ -61,6 +61,7 @@ max_sent_size = max(sent_size_list)
 mean_sent_size = int(np.mean(map(len, [essay for essay in essay_list])))
 
 print ('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
+exit()
 with open(out_dir+'/params', 'a') as f:
     f.write('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
 #input x
