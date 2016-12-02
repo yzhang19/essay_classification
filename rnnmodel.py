@@ -154,6 +154,8 @@ cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
 
 # Evaluate model
+pred_value = tf.argmax(pred,1)
+actual_value = tf.argmax(y,1)
 correct_pred = tf.equal(tf.argmax(pred,1), tf.argmax(y,1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
 
@@ -176,7 +178,8 @@ with tf.Session() as sess:
             sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
             if step % display_step == 0:
                 # Calculate batch accuracy
-                acc = sess.run(accuracy, feed_dict={x: batch_x, y: batch_y})
+                acc , pred_score , acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, y: batch_y})
+
                 # Calculate batch loss
                 loss = sess.run(cost, feed_dict={x: batch_x, y: batch_y})
                 print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
@@ -194,7 +197,13 @@ with tf.Session() as sess:
         batch_testx = testE[start_test:end_test]
         batch_testy = test_scores[start_test:end_test]
         count = count + 1;
-        testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
-
+        #testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
+        temp_testacc , pred_score , actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, y: batch_testy})
+        testacc = testacc + temp_testacc
+        with open(out_dir+'/results', 'a') as f:
+            for i in range(len(pred_score)):
+                f.write('{}\t{}\n'.format(pred_score[i], actual_score[i]))
+        #with open(out_dir+'/results', 'a') as f:
+        #    f.write('{}\t{}\n'.format(pred_score[i], actual_score))
     print ("Testing Accuracy:\n", testacc/count)
 
