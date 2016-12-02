@@ -1,5 +1,5 @@
 from __future__ import division, print_function, absolute_import
-
+#from sklearn.model_selection import GroupKFold
 import os
 import sys
 import time
@@ -17,6 +17,7 @@ tf.flags.DEFINE_integer("embedding_size", 50, "Embedding size for embedding matr
 tf.flags.DEFINE_integer("batch_size", 50, "Batch size for training.")
 tf.flags.DEFINE_integer("num_hidden_nodes", 200, "Number of hidden nodes inside A")
 tf.flags.DEFINE_integer("display_step", 10, "display results every 10 time steps")
+tf.flags.DEFINE_integer("num_rnn_layers", 2, "Number of layers in multilayers RNN")
 # hyper-parameters
 FLAGS = tf.flags.FLAGS
 
@@ -41,15 +42,12 @@ n_hidden = FLAGS.num_hidden_nodes # hidden layer num of features
 n_classes = 2 # total classes (0-1 digits)
 
 #deal with input data
-training_path = '../cleaned_graded_data.csv'     #put name of training file here
-essay_list, label = data_utils.load_open_response_data(training_path)
+training_path = 'clean_graded_data.csv'     #put name of training file here
+essay_list, label, problem_id, count_one = data_utils.load_open_response_data(training_path)
 
-#for i in range(len(label)):
-#    if label[i] > 4:
-#        label[i] = 1
-#    else:
-#        label[i] = 0
+#majorty class
 
+print ('majorty class accuracy is : \n', count_one/len(label))
 # load glove
 word_idx, word2vec = data_utils.load_glove(n_input)
 
@@ -61,7 +59,7 @@ max_sent_size = max(sent_size_list)
 mean_sent_size = int(np.mean(map(len, [essay for essay in essay_list])))
 
 print ('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
-exit()
+#exit()
 with open(out_dir+'/params', 'a') as f:
     f.write('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
 #input x
@@ -69,6 +67,16 @@ E = data_utils.vectorize_data(essay_list, word_idx, max_sent_size)
 #input y : convert score to one hot encoding
 S = np.eye(n_classes)[label]
 # split the data on the fly
+#do the cross validation: test problem is not included in training set
+#gkf = GroupKFold(n_splits=5)
+#for train_index, test_index in gkf.split(E, S, groups = problem_id):
+#    trainE = [E[i] for i in train_index]
+#    testE = [E[i] for i in test_index]
+#    train_scores = [S[i] for i in train_index]
+#    test_scores = [S[i] for i in test_index]
+#    break
+
+#random split the data set to training set and testing set
 trainE, testE, train_scores, test_scores, train_sent_sizes, test_sent_sizes \
     = cross_validation.train_test_split(E, S, sent_size_list, test_size=.2)
 
@@ -86,6 +94,9 @@ print ('The size of evaluation data: {}'.format(n_eval))
 
 batches = zip(range(0, n_train-batch_size, batch_size), range(batch_size, n_train, batch_size))
 batches = [(start, end) for start, end in batches]
+
+batches_test = zip(range(0, n_test-batch_size, batch_size), range(batch_size, n_test, batch_size))
+batches_test = [(start_test, end_test) for start_test, end_test in batches_test]
 
 # tf input
 n_steps = max_sent_size
@@ -122,9 +133,14 @@ def RNN(x, weights, biases):
     # Split to get a list of 'n_steps' tensors of shape (batch_size, n_input)
     x = tf.split(0, n_steps, x)
 
+    hidden_layers = []
+    for i in range(FLAGS.num_rnn_layers):
     # Define a lstm cell with tensorflow
-    lstm_cell = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0)
+        hidden1 = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0)
+        hidden_layers.append(hidden1)
 
+    #lstm_cell = tf.nn.rnn_cell.MultiRNNCell(hidden_layers, state_is_tuple=True)
+    lstm_cell = rnn_cell.MultiRNNCell(hidden_layers, state_is_tuple=True)
     # Get lstm cell output
     outputs, states = rnn.rnn(lstm_cell, x, dtype=tf.float32)
 
@@ -170,6 +186,15 @@ with tf.Session() as sess:
 
     print ("Optimization Finished!")
 
-    print ("Testing Accuracy:", \
-        sess.run(accuracy, feed_dict={x: testE, y: test_scores}))
+   # print ("Testing Accuracy:", \
+    #    sess.run(accuracy, feed_dict={x: testE, y: test_scores}))
+    count = 0;
+    testacc = 0;
+    for start_test, end_test in batches_test:
+        batch_testx = testE[start_test:end_test]
+        batch_testy = test_scores[start_test:end_test]
+        count = count + 1;
+        testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
+
+    print ("Testing Accuracy:\n", testacc/count)
 

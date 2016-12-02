@@ -8,11 +8,20 @@ def load_open_response_data(training_path):
     essay_list = []
     essays = training_df['answer']
     scores = training_df['correct']
+    problem_id = training_df['problem_id']
+    temp_score = scores.tolist()
+    count_one = 0
+    for i in range(len(temp_score)):
+        if temp_score[i] > 0.25:
+            temp_score[i] = 1
+            count_one = count_one + 1
+        else:
+            temp_score[i] = 0
     for idx, essay in essays.iteritems():
         essay = clean_str(essay)
         #essay_list.append([w for w in tokenize(essay) if is_ascii(w)])
         essay_list.append(tokenize(essay))
-    return essay_list, scores.tolist()
+    return essay_list, temp_score, problem_id, count_one
 
 def load_training_data(training_path):
     training_df = pd.read_csv(training_path, delimiter='\t')
