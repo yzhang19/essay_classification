@@ -43,7 +43,7 @@ n_classes = 2 # total classes (0-1 digits)
 
 #deal with input data
 training_path = 'clean_graded_data.csv'     #put name of training file here
-essay_list, label, problem_id, count_one = data_utils.load_open_response_data(training_path)
+essay_list, label, problem_id, count_one, question_list = data_utils.load_open_response_data(training_path)
 
 #majorty class
 
@@ -58,12 +58,20 @@ sent_size_list = map(len, [essay for essay in essay_list])
 max_sent_size = max(sent_size_list)
 mean_sent_size = int(np.mean(map(len, [essay for essay in essay_list])))
 
+question_sent_size_list = map(len, [question for question in question_list])
+question_max_sent_size = max(question_sent_size_list)
+question_mean_sent_size = int(np.mean(map(len, [question for question in question_list])))
+
 print ('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
 #exit()
 with open(out_dir+'/params', 'a') as f:
-    f.write('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, mean_sent_size))
+    f.write('max sentence size: {} \nmean sentence size: {}\nquestion max sentence size: {}\n'
+            'question mean sentence size'.format(max_sent_size, mean_sent_size, question_max_sent_size, question_mean_sent_size))
 #input x
 E = data_utils.vectorize_data(essay_list, word_idx, max_sent_size)
+
+#input question
+Q = data_utils.vectorize_data(question_list, word_idx, question_max_sent_size)
 #input y : convert score to one hot encoding
 S = np.eye(n_classes)[label]
 # split the data on the fly
@@ -77,20 +85,20 @@ S = np.eye(n_classes)[label]
 #    break
 
 #random split the data set to training set and testing set
-trainE, testE, train_scores, test_scores, train_sent_sizes, test_sent_sizes \
-    = cross_validation.train_test_split(E, S, sent_size_list, test_size=.2)
+trainE, testE, train_scores, test_scores, trainQ, testQ, train_sent_sizes, test_sent_sizes, train_Q_sent_sizes, test_Q_sent_sizes \
+    = cross_validation.train_test_split(E, S, Q, sent_size_list, question_sent_size_list, test_size=.2)
 
-trainE, evalE, train_scores, eval_scores, train_sent_sizes, eval_sent_sizes \
-    = cross_validation.train_test_split(trainE, train_scores, train_sent_sizes, test_size=.1)
+#trainE, evalE, train_scores, eval_scores, train_sent_sizes, eval_sent_sizes \
+ #   = cross_validation.train_test_split(trainE, train_scores, train_sent_sizes, test_size=.1)
 
 # data size
 n_train = len(trainE)
 n_test = len(testE)
-n_eval = len(evalE)
+#n_eval = len(evalE)
 
 print ('The size of training data: {}'.format(n_train))
 print ('The size of testing data: {}'.format(n_test))
-print ('The size of evaluation data: {}'.format(n_eval))
+#print ('The size of evaluation data: {}'.format(n_eval))
 
 batches = zip(range(0, n_train-batch_size, batch_size), range(batch_size, n_train, batch_size))
 batches = [(start, end) for start, end in batches]
@@ -105,13 +113,15 @@ print (n_steps)
 #x = tf.placeholder("float", [None, n_steps, n_input])
 x = tf.placeholder(tf.int32, [None, n_steps], name="x")
 y = tf.placeholder(tf.float32, [None, n_classes], name="y")
-
+p = tf.placeholder(tf.int32, [None, question_max_sent_size], name="p")
 #do word embedding
 #x = tf.nn.embedding_lookup(word2vec, x)
+#temp is wordembedding
 temp_placeholder = tf.placeholder(tf.float32, [vocab_size, n_input], name="w_placeholder")
 temp = tf.Variable(temp_placeholder, trainable=False)
 x_embedded = tf.nn.embedding_lookup(temp, x)
-
+p_embedded = tf.nn.embedding_lookup(temp, p)
+xp = tf.cross (x_embedded, p_embedded, name = None)
 # Define weights
 weights = {
     'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
@@ -147,8 +157,8 @@ def RNN(x, weights, biases):
     # Linear activation, using rnn inner loop last output
     return tf.matmul(outputs[-1], weights['out']) + biases['out']
 
-pred = RNN(x_embedded, weights, biases)
-
+#pred = RNN(x_embedded, weights, biases)
+pred = RNN(xp, weights, biases)
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
@@ -173,15 +183,16 @@ with tf.Session() as sess:
         for start, end in batches:
             batch_x = trainE[start:end]
             batch_y = train_scores[start:end]
+            batch_p = trainQ[start:end]
             # Run optimization op (backprop)
             #sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
-            sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
+            sess.run(optimizer, feed_dict={x: batch_x, p:batch_p, y: batch_y})
             if step % display_step == 0:
                 # Calculate batch accuracy
-                acc , pred_score , acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, y: batch_y})
+                acc , pred_score , acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, p:batch_p, y: batch_y})
 
                 # Calculate batch loss
-                loss = sess.run(cost, feed_dict={x: batch_x, y: batch_y})
+                loss = sess.run(cost, feed_dict={x: batch_x, p: batch_p, y: batch_y})
                 print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
                     "{:.6f}".format(loss) + ", Training Accuracy= " + \
                     "{:.5f}".format(acc))
@@ -196,9 +207,10 @@ with tf.Session() as sess:
     for start_test, end_test in batches_test:
         batch_testx = testE[start_test:end_test]
         batch_testy = test_scores[start_test:end_test]
+        batch_testp = testQ[start_test:end_test]
         count = count + 1;
         #testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
-        temp_testacc , pred_score , actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, y: batch_testy})
+        temp_testacc , pred_score , actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, p:batch_p, y: batch_testy})
         testacc = testacc + temp_testacc
         with open(out_dir+'/results', 'a') as f:
             for i in range(len(pred_score)):

@@ -6,13 +6,15 @@ import pandas as pd
 def load_open_response_data(training_path):
     training_df = pd.read_csv(training_path)
     essay_list = []
+    question_list = []
     essays = training_df['answer']
     scores = training_df['correct']
     problem_id = training_df['problem_id']
+    question =training_df['question']
     temp_score = scores.tolist()
     count_one = 0
     for i in range(len(temp_score)):
-        if temp_score[i] > 0.25:
+        if temp_score[i] > 0.5:
             temp_score[i] = 1
             count_one = count_one + 1
         else:
@@ -21,7 +23,11 @@ def load_open_response_data(training_path):
         essay = clean_str(essay)
         #essay_list.append([w for w in tokenize(essay) if is_ascii(w)])
         essay_list.append(tokenize(essay))
-    return essay_list, temp_score, problem_id, count_one
+
+    for idq, question in question.iteritems():
+        question = clean_str(question)
+        question_list.append(tokenize(question))
+    return essay_list, temp_score, problem_id, count_one, question_list
 
 def load_training_data(training_path):
     training_df = pd.read_csv(training_path, delimiter='\t')
