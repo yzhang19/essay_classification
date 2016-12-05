@@ -14,8 +14,8 @@ import data_utils
 tf.flags.DEFINE_float("learning_rate", 0.002, "Learning rate")
 tf.flags.DEFINE_integer("epochs", 20, "Number of epochs to train for.")
 tf.flags.DEFINE_integer("embedding_size", 50, "Embedding size for embedding matrices.")
-tf.flags.DEFINE_integer("batch_size", 50, "Batch size for training.")
-tf.flags.DEFINE_integer("num_hidden_nodes", 200, "Number of hidden nodes inside A")
+tf.flags.DEFINE_integer("batch_size", 30, "Batch size for training.")
+tf.flags.DEFINE_integer("num_hidden_nodes", 300, "Number of hidden nodes inside A")
 tf.flags.DEFINE_integer("display_step", 10, "display results every 10 time steps")
 tf.flags.DEFINE_integer("num_rnn_layers", 2, "Number of layers in multilayers RNN")
 # hyper-parameters
@@ -121,16 +121,16 @@ temp_placeholder = tf.placeholder(tf.float32, [vocab_size, n_input], name="w_pla
 temp = tf.Variable(temp_placeholder, trainable=False)
 x_embedded = tf.nn.embedding_lookup(temp, x)
 p_embedded = tf.nn.embedding_lookup(temp, p)
-xp = tf.cross (x_embedded, p_embedded, name = None)
+#xp = tf.cross (x_embedded, p_embedded, name = None)
 # Define weights
 weights = {
-    'out': tf.Variable(tf.random_normal([n_hidden, n_classes]))
+    'out': tf.Variable(tf.random_normal([n_hidden*2, n_classes]))
 }
 biases = {
     'out': tf.Variable(tf.random_normal([n_classes]))
 }
 
-def RNN(x, weights, biases):
+def RNN(x, weights, biases, n_steps):
 
     # Prepare data shape to match `rnn` function requirements
     # Current data input shape: (batch_size, n_steps, n_input)
@@ -145,7 +145,7 @@ def RNN(x, weights, biases):
 
     hidden_layers = []
     for i in range(FLAGS.num_rnn_layers):
-    # Define a lstm cell with tensorflow
+        # Define a lstm cell with tensorflow
         hidden1 = rnn_cell.BasicLSTMCell(n_hidden, forget_bias=1.0)
         hidden_layers.append(hidden1)
 
@@ -155,13 +155,18 @@ def RNN(x, weights, biases):
     outputs, states = rnn.rnn(lstm_cell, x, dtype=tf.float32)
 
     # Linear activation, using rnn inner loop last output
-    return tf.matmul(outputs[-1], weights['out']) + biases['out']
+    return outputs[-1]
 
-#pred = RNN(x_embedded, weights, biases)
-pred = RNN(xp, weights, biases)
+with tf.variable_scope('rnn') as scope:
+    x_output = RNN(x_embedded, weights, biases, n_steps)
+    scope.reuse_variables()
+    p_output = RNN(p_embedded, weights, biases, question_max_sent_size)
+
+output = tf.concat(1, [x_output, p_output])
+pred = tf.matmul(output, weights['out']) + biases['out']
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
 
 # Evaluate model
 pred_value = tf.argmax(pred,1)
@@ -189,33 +194,28 @@ with tf.Session() as sess:
             sess.run(optimizer, feed_dict={x: batch_x, p:batch_p, y: batch_y})
             if step % display_step == 0:
                 # Calculate batch accuracy
-                acc , pred_score , acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, p:batch_p, y: batch_y})
+                acc, pred_score, acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, p:batch_p, y: batch_y})
 
                 # Calculate batch loss
                 loss = sess.run(cost, feed_dict={x: batch_x, p: batch_p, y: batch_y})
-                print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " + \
-                    "{:.6f}".format(loss) + ", Training Accuracy= " + \
-                    "{:.5f}".format(acc))
+                #print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " +
+                #       "{:.6f}".format(loss) + ", Training Accuracy= " +
+                #       "{:.5f}".format(acc))
             step += 1
-
-    print ("Optimization Finished!")
-
-   # print ("Testing Accuracy:", \
-    #    sess.run(accuracy, feed_dict={x: testE, y: test_scores}))
-    count = 0;
-    testacc = 0;
-    for start_test, end_test in batches_test:
-        batch_testx = testE[start_test:end_test]
-        batch_testy = test_scores[start_test:end_test]
-        batch_testp = testQ[start_test:end_test]
-        count = count + 1;
-        #testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
-        temp_testacc , pred_score , actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, p:batch_p, y: batch_testy})
-        testacc = testacc + temp_testacc
-        with open(out_dir+'/results', 'a') as f:
-            for i in range(len(pred_score)):
-                f.write('{}\t{}\n'.format(pred_score[i], actual_score[i]))
-        #with open(out_dir+'/results', 'a') as f:
-        #    f.write('{}\t{}\n'.format(pred_score[i], actual_score))
-    print ("Testing Accuracy:\n", testacc/count)
-
+        if i % FLAGS.display_step == 0:
+            count = 0
+            testacc = 0
+            for start_test, end_test in batches_test:
+                batch_testx = testE[start_test:end_test]
+                batch_testy = test_scores[start_test:end_test]
+                batch_testp = testQ[start_test:end_test]
+                count = count + 1
+                #testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
+                temp_testacc, pred_score, actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, p:batch_p, y: batch_testy})
+                testacc = testacc + temp_testacc
+                with open(out_dir+'/results', 'a') as f:
+                    for i in range(len(pred_score)):
+                        f.write('{}\t{}\n'.format(pred_score[i], actual_score[i]))
+                        #with open(out_dir+'/results', 'a') as f:
+                        #    f.write('{}\t{}\n'.format(pred_score[i], actual_score))
+            print ("Testing Accuracy:\n", testacc/count)
