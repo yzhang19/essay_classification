@@ -11,13 +11,13 @@ from sklearn import cross_validation
 import data_utils
 
 # flags
-tf.flags.DEFINE_float("learning_rate", 0.002, "Learning rate")
-tf.flags.DEFINE_integer("epochs", 20, "Number of epochs to train for.")
+tf.flags.DEFINE_float("learning_rate", 0.001, "Learning rate")
+tf.flags.DEFINE_integer("epochs", 30, "Number of epochs to train for.")
 tf.flags.DEFINE_integer("embedding_size", 50, "Embedding size for embedding matrices.")
-tf.flags.DEFINE_integer("batch_size", 30, "Batch size for training.")
-tf.flags.DEFINE_integer("num_hidden_nodes", 300, "Number of hidden nodes inside A")
-tf.flags.DEFINE_integer("display_step", 10, "display results every 10 time steps")
-tf.flags.DEFINE_integer("num_rnn_layers", 2, "Number of layers in multilayers RNN")
+tf.flags.DEFINE_integer("batch_size", 300, "Batch size for training.")
+tf.flags.DEFINE_integer("num_hidden_nodes", 200, "Number of hidden nodes inside A")
+tf.flags.DEFINE_integer("display_step", 5, "display results every 10 time steps")
+tf.flags.DEFINE_integer("num_rnn_layers", 1, "Number of layers in multilayers RNN")
 # hyper-parameters
 FLAGS = tf.flags.FLAGS
 
@@ -155,7 +155,7 @@ def RNN(x, weights, biases, n_steps):
     outputs, states = rnn.rnn(lstm_cell, x, dtype=tf.float32)
 
     # Linear activation, using rnn inner loop last output
-    return outputs[-1]
+    return tf.add_n(outputs)/len(outputs)
 
 with tf.variable_scope('rnn') as scope:
     x_output = RNN(x_embedded, weights, biases, n_steps)
@@ -192,16 +192,15 @@ with tf.Session() as sess:
             # Run optimization op (backprop)
             #sess.run(optimizer, feed_dict={x: batch_x, y: batch_y})
             sess.run(optimizer, feed_dict={x: batch_x, p:batch_p, y: batch_y})
-            if step % display_step == 0:
-                # Calculate batch accuracy
-                acc, pred_score, acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, p:batch_p, y: batch_y})
+            # Calculate batch accuracy
+            acc, pred_score, acutal_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_x, p:batch_p, y: batch_y})
 
-                # Calculate batch loss
-                loss = sess.run(cost, feed_dict={x: batch_x, p: batch_p, y: batch_y})
-                #print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " +
-                #       "{:.6f}".format(loss) + ", Training Accuracy= " +
-                #       "{:.5f}".format(acc))
-            step += 1
+            # Calculate batch loss
+            loss = sess.run(cost, feed_dict={x: batch_x, p: batch_p, y: batch_y})
+            #print ("Iter " + str(step*batch_size) + ", Minibatch Loss= " +
+            #       "{:.6f}".format(loss) + ", Training Accuracy= " +
+            #       "{:.5f}".format(acc))
+
         if i % FLAGS.display_step == 0:
             count = 0
             testacc = 0
