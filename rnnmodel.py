@@ -12,11 +12,11 @@ import data_utils
 
 # flags
 tf.flags.DEFINE_float("learning_rate", 0.001, "Learning rate")
-tf.flags.DEFINE_integer("epochs", 30, "Number of epochs to train for.")
-tf.flags.DEFINE_integer("embedding_size", 50, "Embedding size for embedding matrices.")
+tf.flags.DEFINE_integer("epochs", 50, "Number of epochs to train for.")
+tf.flags.DEFINE_integer("embedding_size", 300, "Embedding size for embedding matrices.")
 tf.flags.DEFINE_integer("batch_size", 300, "Batch size for training.")
 tf.flags.DEFINE_integer("num_hidden_nodes", 200, "Number of hidden nodes inside A")
-tf.flags.DEFINE_integer("display_step", 5, "display results every 10 time steps")
+tf.flags.DEFINE_integer("display_step", 2, "display results every 10 time steps")
 tf.flags.DEFINE_integer("num_rnn_layers", 1, "Number of layers in multilayers RNN")
 # hyper-parameters
 FLAGS = tf.flags.FLAGS
@@ -42,7 +42,7 @@ n_hidden = FLAGS.num_hidden_nodes # hidden layer num of features
 n_classes = 2 # total classes (0-1 digits)
 
 #deal with input data
-training_path = 'clean_graded_data.csv'     #put name of training file here
+training_path = '200_clean_graded_data.csv'     #put name of training file here
 essay_list, label, problem_id, count_one, question_list = data_utils.load_open_response_data(training_path)
 
 #majorty class
@@ -66,7 +66,9 @@ print ('max sentence size: {} \nmean sentence size: {}\n'.format(max_sent_size, 
 #exit()
 with open(out_dir+'/params', 'a') as f:
     f.write('max sentence size: {} \nmean sentence size: {}\nquestion max sentence size: {}\n'
-            'question mean sentence size'.format(max_sent_size, mean_sent_size, question_max_sent_size, question_mean_sent_size))
+            'question mean sentence size:{}\n'.format(max_sent_size, mean_sent_size, question_max_sent_size, question_mean_sent_size))
+    f.write('majorty class accuracy is : {}\n'.format(count_one/len(label)))
+
 #input x
 E = data_utils.vectorize_data(essay_list, word_idx, max_sent_size)
 
@@ -164,6 +166,7 @@ with tf.variable_scope('rnn') as scope:
 
 output = tf.concat(1, [x_output, p_output])
 pred = tf.matmul(output, weights['out']) + biases['out']
+pred_prob = tf.nn.softmax(pred)[:, 1]
 # Define loss and optimizer
 cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(pred, y))
 optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost, aggregation_method=tf.AggregationMethod.EXPERIMENTAL_TREE)
@@ -181,6 +184,7 @@ init = tf.initialize_all_variables()
 with tf.Session() as sess:
     sess.run(init, feed_dict={temp_placeholder: word2vec})
     step = 1
+    test_count = 1
     # Keep training until reach max iterations
     #while step * batch_size < training_iters:
     for i in range(1, epochs+1):
@@ -204,17 +208,25 @@ with tf.Session() as sess:
         if i % FLAGS.display_step == 0:
             count = 0
             testacc = 0
+            with open(out_dir+'/results'+str(test_count), 'a') as f:
+                f.write('pred\tactual\n')
             for start_test, end_test in batches_test:
                 batch_testx = testE[start_test:end_test]
                 batch_testy = test_scores[start_test:end_test]
                 batch_testp = testQ[start_test:end_test]
-                count = count + 1
+                count += 1
                 #testacc = testacc + sess.run(accuracy, feed_dict={x: batch_testx, y: batch_testy});
-                temp_testacc, pred_score, actual_score = sess.run([accuracy, pred_value, actual_value], feed_dict={x: batch_testx, p:batch_p, y: batch_testy})
+                temp_testacc, test_prob, pred_score, actual_score = sess.run([accuracy, pred_prob, pred_value, actual_value], feed_dict={x: batch_testx, p:batch_p, y: batch_testy})
                 testacc = testacc + temp_testacc
-                with open(out_dir+'/results', 'a') as f:
+                with open(out_dir+'/probs'+str(test_count), 'a') as f:
+                    for i in range(len(test_prob)):
+                        f.write('{}\n'.format(test_prob[i]))
+                with open(out_dir+'/results'+str(test_count), 'a') as f:
                     for i in range(len(pred_score)):
                         f.write('{}\t{}\n'.format(pred_score[i], actual_score[i]))
                         #with open(out_dir+'/results', 'a') as f:
                         #    f.write('{}\t{}\n'.format(pred_score[i], actual_score))
+            with open(out_dir+'/params', 'a') as f:
+                f.write("Testing Accuracy:{}\n".format(testacc/count))
             print ("Testing Accuracy:\n", testacc/count)
+            test_count += 1

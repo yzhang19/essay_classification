@@ -14,7 +14,7 @@ def load_open_response_data(training_path):
     temp_score = scores.tolist()
     count_one = 0
     for i in range(len(temp_score)):
-        if temp_score[i] > 0.5:
+        if temp_score[i] >= 0.5:
             temp_score[i] = 1
             count_one = count_one + 1
         else:
@@ -75,14 +75,14 @@ def load_training_data(training_path):
            #resolved_score.tolist()
 
     
-def load_glove(dim=50):
+def load_glove(dim=300):
     word2vec = []
     word_idx = {}
     # first word is nil
     word2vec.append([0]*dim)
     print "==> loading glove"
     count = 1
-    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "glove_6b/glove.6B." + str(dim) + "d.txt")) as f:
+    with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "glove.42B." + str(dim) + "d.txt")) as f:
         for line in f:
             l = line.split()
             word = l[0]
